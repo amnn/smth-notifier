@@ -7,16 +7,23 @@ import Foundation
 /// Restores the tmux and terminal context associated with a notification.
 enum FocusService {
   /// Info.plist keys populated by the Makefile for the selected terminal.
-  private enum ConfigurationKey {
+  private enum Key {
     static let terminalBinary = "SmthNotifierTerminalBinary"
     static let terminalBundleIdentifier = "SmthNotifierTerminalBundleIdentifier"
   }
 
+  /// Returns a required string from the application bundle configuration.
+  private static func requiredConfiguration(_ key: String) -> String {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
+      preconditionFailure("Missing string value for \(key) in Info.plist")
+    }
+
+    return value
+  }
+
   /// Terminal configuration required from the application bundle.
-  private static let terminalBinary =
-    Bundle.main.object(forInfoDictionaryKey: ConfigurationKey.terminalBinary) as! String
-  private static let terminalBundleIdentifier =
-    Bundle.main.object(forInfoDictionaryKey: ConfigurationKey.terminalBundleIdentifier) as! String
+  private static let terminalBinary = requiredConfiguration(Key.terminalBinary)
+  private static let terminalBundleIdentifier = requiredConfiguration(Key.terminalBundleIdentifier)
 
   /// Switches the target tmux client to its pane, then activates the terminal.
   ///
@@ -76,7 +83,8 @@ enum FocusService {
   @MainActor
   private static func runningTerminal(binary: String) -> NSRunningApplication? {
     if !terminalBundleIdentifier.isEmpty,
-      let terminal = NSRunningApplication
+      let terminal =
+        NSRunningApplication
         .runningApplications(withBundleIdentifier: terminalBundleIdentifier)
         .first
     {

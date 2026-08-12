@@ -1,0 +1,13 @@
+excluded:
+  - .build
+
+cyclomatic_complexity:
+  ignores_case_statements: true
+
+opening_brace:
+  ignore_multiline_type_headers: true
+  ignore_multiline_statement_conditions: true
+  ignore_multiline_function_signatures: true
+
+trailing_comma:
+  mandatory_comma: true
