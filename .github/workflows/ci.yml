@@ -24,5 +24,8 @@ jobs:
       - name: Check formatting
         run: swift format lint --recursive --strict Package.swift Sources Tests
 
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
       - name: Run SwiftLint
         run: swiftlint lint --strict --reporter github-actions-logging
