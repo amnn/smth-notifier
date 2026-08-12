@@ -11,7 +11,8 @@ let package = Package(
     .executable(name: "smth-notifier", targets: ["SmthNotifier"])
   ],
   targets: [
-    .executableTarget(name: "SmthNotifier")
+    .executableTarget(name: "SmthNotifier"),
+    .testTarget(name: "SmthNotifierTests", dependencies: ["SmthNotifier"]),
   ],
   swiftLanguageModes: [.v5]
 )

@@ -22,7 +22,9 @@ struct SendOptions: Sendable {
       allowed: ["title", "message", "identifier", "socket", "tty", "pane"]
     )
     title = try options.required("title")
-    message = try options.required("message", allowEmpty: true)
+    message = MarkdownPlainText.render(
+      try options.required("message", allowEmpty: true)
+    )
     identifier = try options.required("identifier")
     target = try FocusTarget(options: options)
   }
