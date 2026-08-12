@@ -69,6 +69,10 @@ smth-notifier send --title TEXT --message TEXT --identifier ID \
   --socket PATH --tty PATH --pane ID
 ```
 
+Notification messages are parsed as inline Markdown before delivery. Formatting
+markers are removed while text, whitespace, link labels, and block markers are
+preserved for Notification Center's plain-text body.
+
 The notifier resolves `tmux` from the sending process's `PATH` and stores the
 absolute path with each notification. The click handler then activates the first
 running application with the configured bundle identifier (or executable name
