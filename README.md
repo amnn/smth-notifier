@@ -46,7 +46,13 @@ make clean      # remove build products
 
 ```toml
 [notification]
-command = [
+clear = [
+  "/Users/you/Applications/smth notifier.app/Contents/MacOS/smth-notifier",
+  "clear",
+  "smth:{pane}",
+]
+
+notify = [
   "/Users/you/Applications/smth notifier.app/Contents/MacOS/smth-notifier",
   "send",
   "--title", "{title}",
@@ -57,6 +63,10 @@ command = [
   "--pane", "{pane}",
 ]
 ```
+
+Both commands use the same `smth:{pane}` identifier. When an agent publishes a
+`running` lifecycle update, `smth` invokes `clear` and removes only that pane's
+pending or delivered notification.
 
 ## Commands
 
