@@ -1,0 +1,251 @@
+name: Release
+
+run-name: Release ${{ github.ref_name }}
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  JUST_VERSION: "1.58.0"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build release
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    outputs:
+      ASSET_STEM: ${{ steps.metadata.outputs.ASSET_STEM }}
+      VERSION: ${{ steps.metadata.outputs.VERSION }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: ${{ env.JUST_VERSION }}
+
+      - name: Validate release tag
+        id: metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Require manual dispatches to select a tag, just like automatic runs.
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            echo "Run this workflow from a release tag, not $GITHUB_REF_TYPE '$GITHUB_REF_NAME'." >&2
+            exit 1
+          fi
+
+          # Accept only the repository's v<major>.<minor>.<patch> tag format.
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use the form v<major>.<minor>.<patch>." >&2
+            exit 1
+          fi
+
+          # Derive the release version and compare it with the app bundle version.
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUNDLE_VERSION="$(plutil -extract CFBundleShortVersionString raw App/Info.plist)"
+          if [[ "$BUNDLE_VERSION" != "$VERSION" ]]; then
+            echo "Tag version '$VERSION' does not match Info.plist version '$BUNDLE_VERSION'." >&2
+            exit 1
+          fi
+
+          # Fail before building if this tag already has a GitHub release.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release '$GITHUB_REF_NAME' already exists." >&2
+            exit 1
+          fi
+
+          # Expose normalized names to the signing and publishing jobs.
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ASSET_STEM=smth-notifier-$GITHUB_REF_NAME-macos-arm64" >> "$GITHUB_OUTPUT"
+
+      - name: Build app bundle
+        run: just bundle
+
+      - name: Package app bundle for signing
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Preserve the bundle hierarchy, permissions, and resource forks.
+          ditto -c -k --sequesterRsrc --keepParent \
+            '.build/smth notifier.app' \
+            "$RUNNER_TEMP/app-bundle.zip"
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: app-bundle
+          path: ${{ runner.temp }}/app-bundle.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  sign:
+    name: Sign release
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 10
+    environment: signing
+
+    steps:
+      - name: Check out signing recipe
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: ${{ env.JUST_VERSION }}
+
+      - name: Download app bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: app-bundle
+          path: ${{ runner.temp }}/app-bundle
+
+      - name: Unpack app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Create an isolated destination for the downloaded bundle.
+          mkdir -p "$RUNNER_TEMP/app"
+
+          # Restore the bundle hierarchy, permissions, and resource forks.
+          ditto -x -k \
+            "$RUNNER_TEMP/app-bundle/app-bundle.zip" \
+            "$RUNNER_TEMP/app"
+
+      - name: Import signing identity
+        id: signing
+        shell: bash
+        env:
+          SIGNING_CERT_B64: ${{ secrets.SIGNING_CERT_B64 }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          # Restrict newly created credential files to the runner user.
+          umask 077
+
+          # Define the temporary identity and Keychain locations.
+          P12="$RUNNER_TEMP/signing-identity.p12"
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+
+          # Decode the encrypted PKCS#12 identity supplied by GitHub Secrets.
+          printf '%s' "$SIGNING_CERT_B64" | base64 --decode > "$P12"
+
+          # Protect the temporary Keychain with a fresh, unrecorded password.
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          # Disable the default five-minute auto-lock for this ephemeral job.
+          security set-keychain-settings "$KEYCHAIN"
+
+          # Import the identity and authorize Apple's codesign tool to use it.
+          security import "$P12" \
+            -k "$KEYCHAIN" \
+            -P "$SIGNING_PASSWORD" \
+            -T /usr/bin/codesign
+
+          # Make the imported identity discoverable by Apple's signing APIs.
+          security list-keychains -d user -s "$KEYCHAIN"
+
+          # Select the signing identity dynamically so certificates can rotate.
+          SIGNING_IDENTITY="$(
+            security find-identity -p codesigning "$KEYCHAIN" |
+              awk '/^[[:space:]]*[0-9]+\)/ { print $2; exit }'
+          )"
+
+          # Pass only the public identity hash—not either secret—to later steps.
+          echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - name: Sign and package release
+        shell: bash
+        env:
+          SIGNING_IDENTITY: ${{ steps.signing.outputs.SIGNING_IDENTITY }}
+          ASSET_STEM: ${{ needs.build.outputs.ASSET_STEM }}
+        run: |
+          set -euo pipefail
+
+          # Define the signed bundle and archive locations.
+          APP="$RUNNER_TEMP/app/smth notifier.app"
+          RELEASE_DIR="$RUNNER_TEMP/release-assets"
+          ARCHIVE="$RELEASE_DIR/$ASSET_STEM.zip"
+
+          # Reuse the justfile's signing and verification recipe.
+          just sign-app "$APP" "$SIGNING_IDENTITY"
+
+          # Create the directory uploaded by the following artifact step.
+          mkdir -p "$RELEASE_DIR"
+
+          # Archive the signed app while preserving its bundle metadata.
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
+
+          # Restore the archive to verify the exact bundle users will receive.
+          VERIFICATION_DIR="$RUNNER_TEMP/verify-archive"
+          mkdir -p "$VERIFICATION_DIR"
+          ditto -x -k "$ARCHIVE" "$VERIFICATION_DIR"
+          just verify-app "$VERIFICATION_DIR/smth notifier.app"
+
+      - name: Upload signed release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-release
+          path: ${{ runner.temp }}/release-assets
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    name: Publish release
+    needs:
+      - build
+      - sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download signed release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: signed-release
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.VERSION }}
+          ASSET_STEM: ${{ needs.build.outputs.ASSET_STEM }}
+        run: |
+          set -euo pipefail
+
+          # Publish the signed archive; GitHub records its SHA-256 digest.
+          RELEASE_DIR="$RUNNER_TEMP/release-assets"
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --fail-on-no-commits \
+            --latest \
+            --title "smth notifier $RELEASE_VERSION" \
+            "$RELEASE_DIR/$ASSET_STEM.zip"
