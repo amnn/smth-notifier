@@ -109,8 +109,29 @@ If you installed a prebuilt release, notifications may appear but clicking one
 can trigger a warning that Apple cannot verify `smth notifier` is free of malware.
 This is macOS Gatekeeper, separate from notification permissions.
 
-If you trust the release and are sure it has not been tampered with, add an
-exception for this app:
+#### Verify the signature
+
+Verify the installed app against the checked-in
+[release certificate](certs/20260912-20280912.cert). From the repository root of
+a trusted checkout of the release tag, run:
+
+```sh
+codesign --verify --strict --verbose=4 \
+  -R '=certificate leaf = "certs/20260912-20280912.cert"' \
+  "$HOME/Applications/smth notifier.app"
+```
+
+Adjust the app path if installed elsewhere, and the certificate path if that
+release uses a rotated certificate. The command must succeed and print
+`explicit requirement satisfied`. Stop if verification fails.
+
+This verifies the signing certificate and that the app's signed contents have
+not changed. It does not prove GitHub built or published the app, or that Apple
+has notarized it or checked it for malware.
+
+#### Allow the verified app
+
+If verification passes and you trust the release, add an exception for this app:
 
 1. Click the notification again to trigger the warning.
 2. Open **System Settings → Privacy & Security** and scroll down to **Security**.
