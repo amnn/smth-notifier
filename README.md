@@ -19,6 +19,9 @@ The app is built locally, ad-hoc signed, and installed to
 it elsewhere. Because the app is built locally rather than downloaded, macOS
 can launch it from Notification Center without a Developer ID signature.
 
+If you installed a prebuilt release instead and macOS blocks it when you click a
+notification, see [Troubleshooting](#troubleshooting).
+
 The checked-in `App/Notifier.svg` is used by default. The icon can be changed
 at build time:
 
@@ -97,3 +100,27 @@ When a terminal is provided, the click handler activates the first running
 application with that bundle identifier, even if macOS launches a fresh notifier
 process to handle the click. It deliberately does not distinguish among multiple
 terminal windows, tabs, or splits.
+
+## Troubleshooting
+
+### macOS blocks a prebuilt release
+
+If you installed a prebuilt release, notifications may appear but clicking one
+can trigger a warning that Apple cannot verify `smth notifier` is free of malware.
+This is macOS Gatekeeper, separate from notification permissions.
+
+If you trust the release and are sure it has not been tampered with, add an
+exception for this app:
+
+1. Click the notification again to trigger the warning.
+2. Open **System Settings → Privacy & Security** and scroll down to **Security**.
+3. Find the message about `smth notifier` and click **Open Anyway**.
+4. Authenticate if prompted, then confirm **Open**.
+5. Retry the notification.
+
+If **Open Anyway** does not appear, open the installed `smth notifier.app`
+directly in Finder, then check Settings again.
+
+macOS saves an exception for the app; you do not need to disable Gatekeeper
+system-wide. See [Apple's instructions](https://support.apple.com/en-us/102445)
+for more information.
