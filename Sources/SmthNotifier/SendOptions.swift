@@ -12,14 +12,14 @@ struct SendOptions: Sendable {
   /// Identifier used to replace and later clear the notification.
   let identifier: String
 
-  /// tmux destination restored when the notification is clicked.
+  /// tmux destination and terminal restored when the notification is clicked.
   let target: FocusTarget
 
   /// Parses and validates all options accepted by the `send` command.
   init(arguments: [String]) throws {
     let options = try CommandLineOptions(
       arguments: arguments,
-      allowed: ["title", "message", "identifier", "socket", "tty", "pane"]
+      allowed: ["title", "message", "identifier", "socket", "tty", "pane", "terminal"]
     )
     title = try options.required("title")
     message = MarkdownPlainText.render(

@@ -15,9 +15,6 @@ SWIFT_INPUTS := $(shell find Sources -type f)
 SWIFT_SOURCE_DIRS := $(shell find Sources -type d)
 PACKAGE_INPUTS := Package.swift $(wildcard Package.resolved)
 
-SMTH_NOTIFIER_TERMINAL_BINARY ?= Terminal
-SMTH_NOTIFIER_TERMINAL_BUNDLE_IDENTIFIER ?= com.apple.Terminal
-
 SMTH_NOTIFIER_ICON ?= App/Notifier.svg
 ICON_SOURCE := $(SMTH_NOTIFIER_ICON)
 
@@ -28,14 +25,6 @@ ICON_DIR := $(BUILD_DIR)/icons/$(ICON_SOURCE_KEY)
 ICONSET := $(ICON_DIR)/AppIcon.iconset
 ICON := $(ICON_DIR)/AppIcon.icns
 
-# The app configuration key ensures changing any embedded build setting selects
-# a new app target, even when all input files are older than the existing app.
-APP_CONFIGURATION_KEY := $(shell printf '%s\0%s\0%s' \
-  "$(ICON_SOURCE)" \
-  "$(SMTH_NOTIFIER_TERMINAL_BINARY)" \
-  "$(SMTH_NOTIFIER_TERMINAL_BUNDLE_IDENTIFIER)" \
-  | shasum -a 256 | cut -d ' ' -f 1)
-
 # Escape spaces when using a path as a prerequisite.
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
@@ -43,8 +32,8 @@ ESCAPE_SPACES = $(subst $(SPACE),\$(SPACE),$(1))
 ICON_SOURCE_PREREQUISITE := $(call ESCAPE_SPACES,$(ICON_SOURCE))
 
 # Keeping the build stamp inside the bundle makes deleting the bundle or
-# switching build settings invalidate the bundle without freshness logic.
-APP_STAMP := $(RESOURCES)/BuildStamp-$(APP_CONFIGURATION_KEY)
+# switching icons invalidate the bundle without freshness logic.
+APP_STAMP := $(RESOURCES)/BuildStamp-$(ICON_SOURCE_KEY)
 APP_STAMP_TARGET := $(call ESCAPE_SPACES,$(APP_STAMP))
 
 .DEFAULT_GOAL := bundle
@@ -86,8 +75,6 @@ $(APP_STAMP_TARGET): $(EXECUTABLE) $(ICON) App/Info.plist
 	mkdir -p "$(MACOS)" "$(RESOURCES)"
 	cp "$(EXECUTABLE)" "$(MACOS)/$(EXECUTABLE_NAME)"
 	cp App/Info.plist "$(CONTENTS)/Info.plist"
-	plutil -replace SmthNotifierTerminalBinary -string "$(SMTH_NOTIFIER_TERMINAL_BINARY)" "$(CONTENTS)/Info.plist"
-	plutil -replace SmthNotifierTerminalBundleIdentifier -string "$(SMTH_NOTIFIER_TERMINAL_BUNDLE_IDENTIFIER)" "$(CONTENTS)/Info.plist"
 	cp "$(ICON)" "$(RESOURCES)/AppIcon.icns"
 	@touch "$(APP_STAMP)"
 	@echo "Built $(APP)"
