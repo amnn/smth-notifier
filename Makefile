@@ -36,41 +36,22 @@ APP_CONFIGURATION_KEY := $(shell printf '%s\0%s\0%s' \
   "$(SMTH_NOTIFIER_TERMINAL_BUNDLE_IDENTIFIER)" \
   | shasum -a 256 | cut -d ' ' -f 1)
 
-# Escape spaces when using the configurable source path as a prerequisite.
-empty :=
-space := $(empty) $(empty)
-escape_spaces = $(subst $(space),\$(space),$(1))
-ICON_SOURCE_PREREQUISITE := $(call escape_spaces,$(ICON_SOURCE))
+# Escape spaces when using a path as a prerequisite.
+EMPTY :=
+SPACE := $(EMPTY) $(EMPTY)
+ESCAPE_SPACES = $(subst $(SPACE),\$(SPACE),$(1))
+ICON_SOURCE_PREREQUISITE := $(call ESCAPE_SPACES,$(ICON_SOURCE))
 
-# Keeping the variant stamp inside the bundle makes deleting the bundle or
-# switching build settings invalidate the app target without freshness logic.
+# Keeping the build stamp inside the bundle makes deleting the bundle or
+# switching build settings invalidate the bundle without freshness logic.
 APP_STAMP := $(RESOURCES)/BuildStamp-$(APP_CONFIGURATION_KEY)
-APP_STAMP_TARGET := $(call escape_spaces,$(APP_STAMP))
+APP_STAMP_TARGET := $(call ESCAPE_SPACES,$(APP_STAMP))
 
-SMTH_NOTIFIER_INSTALL_DIR ?= $(HOME)/Applications
-INSTALLED_APP := $(SMTH_NOTIFIER_INSTALL_DIR)/$(NAME).app
-INSTALLED_EXECUTABLE := $(INSTALLED_APP)/Contents/MacOS/$(EXECUTABLE_NAME)
-INSTALLED_STAMP := $(INSTALLED_APP)/Contents/Resources/BuildStamp-$(APP_CONFIGURATION_KEY)
-INSTALLED_STAMP_TARGET := $(call escape_spaces,$(INSTALLED_STAMP))
-
-LAUNCH_SERVICES := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := bundle
 .DELETE_ON_ERROR:
 
-# These are user-facing aliases or actions. The build aliases have no recipes;
-# Make caches their concrete file prerequisites.
-.PHONY: help build icon app install authorize clean
-
-help:
-	@printf '%s\n' \
-	  'Available targets:' \
-	  '  build      Build the executable when its inputs change' \
-	  '  icon       Generate the icon when its source changes' \
-	  '  app        Build and sign the app when its inputs change' \
-	  '  install    Install and register the app when it changes' \
-	  '  authorize  Request notification permission' \
-	  '  clean      Remove build products'
+# These aliases expose Make's incremental artifacts to the justfile.
+.PHONY: build icon bundle clean
 
 build: $(EXECUTABLE)
 
@@ -98,7 +79,7 @@ $(ICON): $(ICON_SOURCE_PREREQUISITE)
 	@rm -rf "$(ICONSET)"
 	@echo "Built $@"
 
-app: $(APP_STAMP_TARGET)
+bundle: $(APP_STAMP_TARGET)
 
 $(APP_STAMP_TARGET): $(EXECUTABLE) $(ICON) App/Info.plist
 	rm -rf "$(APP)"
@@ -108,24 +89,8 @@ $(APP_STAMP_TARGET): $(EXECUTABLE) $(ICON) App/Info.plist
 	plutil -replace SmthNotifierTerminalBinary -string "$(SMTH_NOTIFIER_TERMINAL_BINARY)" "$(CONTENTS)/Info.plist"
 	plutil -replace SmthNotifierTerminalBundleIdentifier -string "$(SMTH_NOTIFIER_TERMINAL_BUNDLE_IDENTIFIER)" "$(CONTENTS)/Info.plist"
 	cp "$(ICON)" "$(RESOURCES)/AppIcon.icns"
-	printf 'APPL????' > "$(CONTENTS)/PkgInfo"
 	@touch "$(APP_STAMP)"
-	codesign --force --sign - "$(APP)"
-	xattr -dr com.apple.quarantine "$(APP)" 2>/dev/null || true
-	codesign --verify --strict --verbose=2 "$(APP)"
 	@echo "Built $(APP)"
-
-install: $(INSTALLED_STAMP_TARGET)
-
-$(INSTALLED_STAMP_TARGET): $(APP_STAMP_TARGET)
-	mkdir -p "$(SMTH_NOTIFIER_INSTALL_DIR)"
-	rm -rf "$(INSTALLED_APP)"
-	ditto "$(APP)" "$(INSTALLED_APP)"
-	"$(LAUNCH_SERVICES)" -f "$(INSTALLED_APP)"
-	@echo "Installed $(INSTALLED_APP)"
-
-authorize:
-	"$(INSTALLED_EXECUTABLE)" authorize
 
 clean:
 	rm -rf "$(BUILD_DIR)"

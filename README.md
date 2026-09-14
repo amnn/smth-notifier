@@ -9,14 +9,15 @@ configured terminal application.
 ## Install
 
 ```sh
-make install
-make authorize
+brew install just
+just install
+just authorize
 ```
 
 The app is built locally, ad-hoc signed, and installed to
 `~/Applications/smth notifier.app`. Set `SMTH_NOTIFIER_INSTALL_DIR` to install
-it elsewhere. Because the app never acquires a quarantine attribute, macOS can
-launch it from Notification Center without a Developer ID signature.
+it elsewhere. Because the app is built locally rather than downloaded, macOS
+can launch it from Notification Center without a Developer ID signature.
 
 The checked-in `App/Notifier.svg` and macOS Terminal are used by default. The
 icon, terminal executable, and reverse-domain bundle identifier can be changed
@@ -26,7 +27,7 @@ at build time:
 SMTH_NOTIFIER_ICON="$HOME/.config/smth/notifier.svg" \
 SMTH_NOTIFIER_TERMINAL_BINARY="ghostty" \
 SMTH_NOTIFIER_TERMINAL_BUNDLE_IDENTIFIER="com.mitchellh.ghostty" \
-make install
+just install
 ```
 
 `SMTH_NOTIFIER_ICON` may name any image supported by `sips`.
@@ -34,12 +35,13 @@ make install
 Useful targets:
 
 ```sh
-make build      # build the executable when Swift inputs change
-make icon       # generate the app icon when its source changes
-make app        # assemble and sign the app when its inputs change
-make install    # install and register the app when it changes
-make authorize  # request notification permission for the installed app
-make clean      # remove build products
+just build      # build the executable incrementally
+just icon       # generate the app icon incrementally
+just bundle     # assemble the app bundle incrementally without signing
+just app        # assemble and ad-hoc sign the app
+just install    # build, sign, install, and register the app
+just authorize  # request notification permission for the installed app
+just clean      # remove build products
 ```
 
 ## Configure smth
