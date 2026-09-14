@@ -6,33 +6,17 @@ import Foundation
 
 /// Restores the tmux and terminal context associated with a notification.
 enum FocusService {
-  /// Info.plist keys populated by the Makefile for the selected terminal.
-  private enum Key {
-    static let terminalBinary = "SmthNotifierTerminalBinary"
-    static let terminalBundleIdentifier = "SmthNotifierTerminalBundleIdentifier"
-  }
-
-  /// Returns a required string from the application bundle configuration.
-  private static func requiredConfiguration(_ key: String) -> String {
-    guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
-      preconditionFailure("Missing string value for \(key) in Info.plist")
-    }
-
-    return value
-  }
-
-  /// Terminal configuration required from the application bundle.
-  private static let terminalBinary = requiredConfiguration(Key.terminalBinary)
-  private static let terminalBundleIdentifier = requiredConfiguration(Key.terminalBundleIdentifier)
-
   /// Switches the target tmux client to its pane, then activates the terminal.
   ///
-  /// If tmux fails, the terminal is not activated. If activation fails, the
-  /// tmux client remains switched and the activation error is thrown.
+  /// Does nothing when no terminal is configured. If tmux fails, the terminal
+  /// is not activated. If activation fails, the tmux client remains switched
+  /// and the activation error is thrown.
   @MainActor
   static func focus(_ target: FocusTarget) throws {
+    guard let bundleIdentifier = target.terminalBundleIdentifier else { return }
+
     try switchTmux(to: target)
-    try activateTerminal()
+    try activateTerminal(bundleIdentifier: bundleIdentifier)
   }
 
   /// Runs the target's resolved tmux executable and reports nonzero exits.
@@ -65,35 +49,20 @@ enum FocusService {
     }
   }
 
-  /// Activates the configured running terminal application.
+  /// Activates the first running terminal with the target's bundle identifier.
   @MainActor
-  private static func activateTerminal() throws {
-    let name = URL(fileURLWithPath: terminalBinary).lastPathComponent
-
-    guard let terminal = runningTerminal(binary: name) else {
-      throw CommandError(message: "\(name) is not running")
+  private static func activateTerminal(bundleIdentifier: String) throws {
+    guard
+      let terminal =
+        NSRunningApplication
+        .runningApplications(withBundleIdentifier: bundleIdentifier)
+        .first
+    else {
+      throw CommandError(message: "\(bundleIdentifier) is not running")
     }
 
     guard terminal.activate(options: [.activateAllWindows]) else {
-      throw CommandError(message: "\(name) refused activation")
+      throw CommandError(message: "\(bundleIdentifier) refused activation")
     }
   }
-
-  /// Finds the terminal by bundle identifier, falling back to executable name.
-  @MainActor
-  private static func runningTerminal(binary: String) -> NSRunningApplication? {
-    if !terminalBundleIdentifier.isEmpty,
-      let terminal =
-        NSRunningApplication
-        .runningApplications(withBundleIdentifier: terminalBundleIdentifier)
-        .first
-    {
-      return terminal
-    }
-
-    return NSWorkspace.shared.runningApplications.first { application in
-      application.executableURL?.lastPathComponent == binary
-    }
-  }
-
 }

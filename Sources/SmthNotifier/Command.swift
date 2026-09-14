@@ -9,9 +9,9 @@ enum Command {
       smth-notifier authorize
       smth-notifier status
       smth-notifier clear [IDENTIFIER]
-      smth-notifier focus --socket PATH --tty PATH --pane ID
+      smth-notifier focus --socket PATH --tty PATH --pane ID [--terminal BUNDLE_ID]
       smth-notifier send --title TEXT --message TEXT --identifier ID \\
-        --socket PATH --tty PATH --pane ID
+        --socket PATH --tty PATH --pane ID [--terminal BUNDLE_ID]
     """
 
   /// Executes the command in `arguments`.
@@ -48,7 +48,7 @@ enum Command {
     case "focus":
       let options = try CommandLineOptions(
         arguments: rest,
-        allowed: ["socket", "tty", "pane"]
+        allowed: ["socket", "tty", "pane", "terminal"]
       )
       try FocusService.focus(FocusTarget(options: options))
 

@@ -32,10 +32,6 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
-    <key>SmthNotifierTerminalBinary</key>
-    <string>Terminal</string>
-    <key>SmthNotifierTerminalBundleIdentifier</key>
-    <string>com.apple.Terminal</string>
     <key>NSUserNotificationAlertStyle</key>
     <string>alert</string>
 </dict>

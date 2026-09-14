@@ -41,6 +41,13 @@ struct CommandLineOptions {
     self.values = values
   }
 
+  /// Returns a nonempty value for `name`, or `nil` when the option is absent.
+  /// An explicitly supplied empty value produces `CommandError`.
+  func optional(_ name: String) throws -> String? {
+    guard values[name] != nil else { return nil }
+    return try required(name)
+  }
+
   /// Returns the value for `name`.
   ///
   /// By default an absent or empty value produces `CommandError`. Set
